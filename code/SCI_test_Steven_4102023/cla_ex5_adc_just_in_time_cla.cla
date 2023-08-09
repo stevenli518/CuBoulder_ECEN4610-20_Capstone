@@ -1,0 +1,301 @@
+//#############################################################################
+//
+// FILE:   cla_ex5_adc_just_in_time_cla.cla
+//
+// TITLE:  Just-in-time ADC sampling with CLA
+//
+// Task 1 reads ADC result, do filtering and updates the duty of PWM output
+//
+//
+// Task 8 initializes the global variables used in CLA
+//
+//#############################################################################
+//
+//
+// $Copyright:
+// Copyright (C) 2022 Texas Instruments Incorporated - http://www.ti.com/
+//
+// Redistribution and use in source and binary forms, with or without 
+// modification, are permitted provided that the following conditions 
+// are met:
+// 
+//   Redistributions of source code must retain the above copyright 
+//   notice, this list of conditions and the following disclaimer.
+// 
+//   Redistributions in binary form must reproduce the above copyright
+//   notice, this list of conditions and the following disclaimer in the 
+//   documentation and/or other materials provided with the   
+//   distribution.
+// 
+//   Neither the name of Texas Instruments Incorporated nor the names of
+//   its contributors may be used to endorse or promote products derived
+//   from this software without specific prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// $
+//#############################################################################
+
+//
+// Included Files
+//
+#include <stdint.h>
+#include "cla_ex5_adc_just_in_time_shared.h"
+#include "CLAmath.h"
+//
+// Globals
+//
+
+//
+// Variables used to read ADC result and implement 3-point filter
+//
+uint16_t i;
+uint16_t j;
+// Voltage Variable
+float V_sum;
+float V_analog;
+float V_square_result;
+int16_t V_scaling;
+uint16_t Vdac;
+
+//Current Variable
+float I_sum;
+float I_analog;
+float I_square_result;
+int16_t I_scaling;
+uint16_t Idac;
+uint16_t DacOutput;
+
+// Power Variable
+float P_sum;
+
+float oneOverEightCla;
+float meanSquareScaleCla;
+
+#define DAC_OUTPUT_RAMP_STEP 64
+//-----------------------------------------------------------------------------
+//
+// Task 1
+//
+// Description :
+//
+//-----------------------------------------------------------------------------
+__attribute__((interrupt)) void Cla1Task1 ( void )
+{
+    //
+    // Uncomment this to debug the CLA while connected to the debugger
+    //
+    //__mdebugstop();
+
+
+#if 0
+#if 1
+    // Sine wave on DAC
+    HWREGH(DACA_BASE + DAC_O_VALS) = dac_sample[i];
+
+    i++;
+    i &= (size_of_samples-1); // If i==8, it gets reset to 0
+#else
+    // Ramping output on DAC
+    DacOutput += DAC_OUTPUT_RAMP_STEP;
+
+    HWREGH(DACA_BASE + DAC_O_VALS) = DacOutput;
+
+#endif
+#endif
+    // HWREG(GPIODATA_BASE + GPIO_O_GPATOGGLE) = 0x20000; // Toggle GPIO17
+}
+
+//-----------------------------------------------------------------------------
+//
+// Task 2 - Title Here
+//
+// Description: After 8 samples received, RMS calculation will be performed in here.
+//
+//-----------------------------------------------------------------------------
+__attribute__((interrupt))  void Cla1Task2 ( void )
+{
+    //
+    // Uncomment this to debug the CLA while connected to the debugger
+    //
+    //__mdebugstop();
+#if 0
+//    HWREG(GPIODATA_BASE + GPIO_O_GPATOGGLE) = 0x20000; // Toggle GPIO17
+    if(j < size_of_samples){
+//        HWREG(GPIODATA_BASE + GPIO_O_GPATOGGLE) = 0x20000; // Toggle GPIO17
+        Idac= HWREGH(ADCBRESULT_BASE + ADC_O_RESULT0  + ADC_SOC_NUMBER15);
+//        HWREGH(DACB_BASE + DAC_O_VALS) = (HWREGH(DACB_BASE + DAC_O_VALS) &
+//                                         ~DAC_VALS_DACVALS_M) |
+//                                        (uint16_t)( Idac& DAC_VALS_DACVALS_M);
+        I_sample[j] = Idac;
+        j++;
+//        HWREG(GPIODATA_BASE + GPIO_O_GPATOGGLE) = 0x20000; // Toggle GPIO17
+    }
+    else{
+        j = 0;
+    }
+//    HWREG(GPIODATA_BASE + GPIO_O_GPATOGGLE) = 0x20000; // Toggle GPIO17
+#endif // 0
+}
+
+//-----------------------------------------------------------------------------
+//
+// Task 3 - Title Here
+//
+// Description: Description/steps here.
+//
+//-----------------------------------------------------------------------------
+__attribute__((interrupt))  void Cla1Task3 ( void )
+{
+    HWREG(GPIODATA_BASE + GPIO_O_GPASET) = 0x100; // Set GPIO8
+
+#if 0
+    V_sum = 0.0f;
+    I_sum = 0.0f;
+    P_sum = 0.0f;
+    for(i=0; i<size_of_samples; i++)
+    {
+        V_sum += V_sample[i] * V_sample[i];
+        I_sum += I_sample[i] * I_sample[i];
+        P_sum += I_sample[i] * V_sample[i];
+    }
+#else
+#if size_of_samples != 8
+#error "Change manual unrolling"
+#endif
+    V_sum = V_sample[0] * V_sample[0];
+    I_sum = I_sample[0] * I_sample[0];
+    P_sum = I_sample[0] * V_sample[0];
+
+    V_sum += V_sample[1] * V_sample[1];
+    I_sum += I_sample[1] * I_sample[1];
+    P_sum += I_sample[1] * V_sample[1];
+
+    V_sum += V_sample[2] * V_sample[2];
+    I_sum += I_sample[2] * I_sample[2];
+    P_sum += I_sample[2] * V_sample[2];
+
+    V_sum += V_sample[3] * V_sample[3];
+    I_sum += I_sample[3] * I_sample[3];
+    P_sum += I_sample[3] * V_sample[3];
+
+    V_sum += V_sample[4] * V_sample[4];
+    I_sum += I_sample[4] * I_sample[4];
+    P_sum += I_sample[4] * V_sample[4];
+
+    V_sum += V_sample[5] * V_sample[5];
+    I_sum += I_sample[5] * I_sample[5];
+    P_sum += I_sample[5] * V_sample[5];
+
+    V_sum += V_sample[6] * V_sample[6];
+    I_sum += I_sample[6] * I_sample[6];
+    P_sum += I_sample[6] * V_sample[6];
+
+    V_sum += V_sample[7] * V_sample[7];
+    I_sum += I_sample[7] * I_sample[7];
+    P_sum += I_sample[7] * V_sample[7];
+#endif
+
+    // Perform mean-square calculation
+    V_rms_CLA = CLAsqrt(V_sum * meanSquareScaleCla);
+    I_rms_CLA = CLAsqrt(I_sum * meanSquareScaleCla);
+    P_average_CLA = P_sum * meanSquareScaleCla;
+
+    HWREG(GPIODATA_BASE + GPIO_O_GPACLEAR) = 0x100; // Clear GPIO8
+
+}
+
+//-----------------------------------------------------------------------------
+//
+// Task 4 - Title Here
+//
+// Description: Description/steps here.
+//
+//-----------------------------------------------------------------------------
+__attribute__((interrupt))  void Cla1Task4 ( void )
+{
+
+}
+
+//-----------------------------------------------------------------------------
+//
+// Task 5 - Title Here
+//
+// Description: Description/steps here.
+//
+//-----------------------------------------------------------------------------
+__attribute__((interrupt))  void Cla1Task5 ( void )
+{
+
+}
+
+//-----------------------------------------------------------------------------
+//
+// Task 6 - Title Here
+//
+// Description: Description/steps here.
+//
+//-----------------------------------------------------------------------------
+__attribute__((interrupt))  void Cla1Task6 ( void )
+{
+
+}
+
+//-----------------------------------------------------------------------------
+//
+// Task 7 - Title Here
+//
+// Description: Description/steps here.
+//
+//-----------------------------------------------------------------------------
+__attribute__((interrupt))  void Cla1Task7 ( void )
+{
+
+}
+
+//-----------------------------------------------------------------------------
+//
+// Task 8 - One Time Initialization Task
+//
+// Description: This task initialize the CLA global variables used in Task 1
+//
+//-----------------------------------------------------------------------------
+__attribute__((interrupt))  void Cla1Task8 ( void )
+{
+
+    //
+    // Uncomment this to debug the CLA while connected to the debugger
+    //
+    //__mdebugstop();
+
+    //
+    // Initializing CLA global variables
+    //
+
+    i = 0;
+    j = 0;
+    // Voltage
+    Vdac = 0;
+
+    // Current
+    Idac = 0;
+
+    //Averaged point by point power
+    DacOutput = 0;
+
+    oneOverEightCla = 0.125f;
+    meanSquareScaleCla = ((3.3f * 3.3f) / (4095.0f * 4095.0f * 8.0f));
+}
+
+//
+// End of File
+//
